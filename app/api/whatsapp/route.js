@@ -9,15 +9,6 @@ function getSupabase() {
     );
 }
 
-// Dynamic import of Twilio to avoid build-time initialization
-async function getTwilioClient() {
-    const twilio = (await import('twilio')).default;
-    return twilio(
-        process.env.TWILIO_ACCOUNT_SID,
-        process.env.TWILIO_AUTH_TOKEN
-    );
-}
-
 function getWhatsAppNumber() {
     return process.env.TWILIO_WHATSAPP_NUMBER;
 }
@@ -477,17 +468,34 @@ async function updateSession(supabase, phone, state, context, projectId = null) 
         });
 }
 
+// Send WhatsApp message using fetch (no Twilio SDK)
 async function sendWhatsAppMessage(phone, message) {
     try {
-        // Dynamic import Twilio only when actually sending
-        const twilioClient = await getTwilioClient();
-        const TWILIO_WHATSAPP_NUMBER = getWhatsAppNumber();
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const twilioNumber = getWhatsAppNumber();
+        const toNumber = `whatsapp:+${phone.replace(/\D/g, '')}`;
 
-        await twilioClient.messages.create({
-            from: TWILIO_WHATSAPP_NUMBER,
-            to: `whatsapp:+${phone.replace(/\D/g, '')}`,
-            body: message
-        });
+        const response = await fetch(
+            `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+            {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    From: twilioNumber,
+                    To: toNumber,
+                    Body: message,
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`Twilio API error: ${response.status} - ${errorData}`);
+        }
     } catch (error) {
         console.error(`Failed to send to ${phone}:`, error.message);
     }

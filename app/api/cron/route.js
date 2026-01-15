@@ -9,15 +9,6 @@ function getSupabase() {
     );
 }
 
-// Dynamic import of Twilio to avoid build-time initialization
-async function getTwilioClient() {
-    const twilio = (await import('twilio')).default;
-    return twilio(
-        process.env.TWILIO_ACCOUNT_SID,
-        process.env.TWILIO_AUTH_TOKEN
-    );
-}
-
 function getWhatsAppNumber() {
     return process.env.TWILIO_WHATSAPP_NUMBER;
 }
@@ -227,7 +218,7 @@ async function checkTaskReminders(supabase) {
     await sendToTeam(supabase, message);
 }
 
-// Send to team
+// Send to team - uses fetch instead of Twilio SDK
 async function sendToTeam(supabase, message, projectId = null) {
     const { data: teamMembers } = await supabase
         .from('team_members')
@@ -239,18 +230,35 @@ async function sendToTeam(supabase, message, projectId = null) {
         return;
     }
 
-    // Dynamic import Twilio only when actually sending
-    const twilioClient = await getTwilioClient();
-    const TWILIO_WHATSAPP_NUMBER = getWhatsAppNumber();
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const twilioNumber = getWhatsAppNumber();
 
     for (const member of teamMembers) {
         if (member.phone_number) {
             try {
-                await twilioClient.messages.create({
-                    from: TWILIO_WHATSAPP_NUMBER,
-                    to: `whatsapp:+${member.phone_number.replace(/\D/g, '')}`,
-                    body: message
-                });
+                const toNumber = `whatsapp:+${member.phone_number.replace(/\D/g, '')}`;
+
+                // Use fetch instead of Twilio SDK
+                const response = await fetch(
+                    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: new URLSearchParams({
+                            From: twilioNumber,
+                            To: toNumber,
+                            Body: message,
+                        }),
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error(`Twilio API error: ${response.status}`);
+                }
 
                 if (projectId) {
                     await supabase.from('whatsapp_sessions').upsert({
