@@ -97,7 +97,7 @@ async function getSession(supabase, phone) {
 }
 
 async function updateSession(supabase, phone, state, context) {
-    await supabase.from('whatsapp_sessions').upsert({ phone_number: phone, session_state: state, context: context, last_message_at: new Date().toISOString() });
+    await supabase.from('whatsapp_sessions').update({ session_state: state, context: context, last_message_at: new Date().toISOString() }).eq('phone_number', phone);
 }
 
 async function sendWhatsAppMessage(phone, message) {
