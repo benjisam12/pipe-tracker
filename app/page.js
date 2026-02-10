@@ -4,15 +4,19 @@ import { useState, useEffect } from 'react';
 export default function Dashboard() {
     const [projects, setProjects] = useState([]);
     const [tasks, setTasks] = useState([]);
-    const [taskLists, setTaskLists] = useState([]);
     const [activeTab, setActiveTab] = useState('dashboard');
     const [showProjectModal, setShowProjectModal] = useState(false);
     const [showTaskModal, setShowTaskModal] = useState(false);
-    const [showTaskListModal, setShowTaskListModal] = useState(false);
+    const [showListModal, setShowListModal] = useState(false);
     const [editingProject, setEditingProject] = useState(null);
     const [editingTask, setEditingTask] = useState(null);
-    const [editingTaskList, setEditingTaskList] = useState(null);
-    const [selectedList, setSelectedList] = useState(null);
+    const [selectedListId, setSelectedListId] = useState(null);
+    const [taskLists, setTaskLists] = useState([
+        { id: 1, name: 'Exhibition Prep', description: 'ADIPEC 2026 preparation', color: '#ef4444', icon: '📅' },
+        { id: 2, name: 'Website Rebuild', description: 'New company website project', color: '#22c55e', icon: '🌐' },
+        { id: 3, name: 'Office Admin', description: 'General administrative tasks', color: '#6366f1', icon: '💼' },
+        { id: 4, name: 'Supplier Visits', description: 'Factory visits and audits', color: '#f59e0b', icon: '✈️' },
+    ]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => { loadData(); }, []);
@@ -20,157 +24,133 @@ export default function Dashboard() {
     async function loadData() {
         setLoading(true);
         const [projRes, taskRes] = await Promise.all([fetch('/api/projects'), fetch('/api/tasks')]);
-        const projectsData = await projRes.json();
-        const tasksData = await taskRes.json();
-        setProjects(Array.isArray(projectsData) ? projectsData : []);
-        setTasks(Array.isArray(tasksData) ? tasksData : []);
-        
-        // Group tasks into lists (mock for now - you can add task_lists table later)
-        const lists = [
-            { id: 1, name: 'Exhibition Prep', description: 'ADIPEC 2026 preparation', color: '#ef4444', icon: '📅' },
-            { id: 2, name: 'Website Rebuild', description: 'New company website project', color: '#22c55e', icon: '🌐' },
-            { id: 3, name: 'Office Admin', description: 'General administrative tasks', color: '#6366f1', icon: '💼' },
-            { id: 4, name: 'Supplier Visits', description: 'Factory visits and audits', color: '#f59e0b', icon: '✈️' },
-        ];
-        setTaskLists(lists);
+        setProjects(await projRes.json() || []);
+        setTasks(await taskRes.json() || []);
         setLoading(false);
     }
 
-    const superPriority = projects.filter(p => p.priority === 'super' || p.status === 'urgent');
     const needsAttention = projects.filter(p => {
         const lastUpdate = new Date(p.last_follow_up || p.created_at);
-        const daysSince = (new Date() - lastUpdate) / (1000 * 60 * 60 * 24);
-        return daysSince > 7;
+        return (new Date() - lastUpdate) / (1000*60*60*24) > 7;
     });
-    const overdueTasks = tasks.filter(t => t.due_date && new Date(t.due_date) < new Date());
-    const todayTasks = tasks.filter(t => t.due_date && new Date(t.due_date).toDateString() === new Date().toDateString());
-    const totalPipeline = projects.reduce((sum, p) => sum + (parseFloat(p.quote_amount) || 0), 0);
-
-    const tabs = [
-        { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-        { id: 'projects', label: 'Projects', icon: '📁', count: projects.length },
-        { id: 'priority', label: 'Priority Tasks', icon: '⚡', count: overdueTasks.length },
-        { id: 'tasks', label: 'Tasks', icon: '✅', count: tasks.length },
-        { id: 'urgent', label: 'Urgent', icon: '🚨', count: needsAttention.length },
-    ];
+    const superPriority = projects.filter(p => p.priority === 'super');
+    const totalPipeline = projects.reduce((s, p) => s + (parseFloat(p.quote_amount) || 0), 0);
+    const completedTasks = tasks.filter(t => t.status === 'completed').length;
+    const overdueTasks = tasks.filter(t => t.due_date && new Date(t.due_date) < new Date() && t.status !== 'completed');
 
     return (
-        <div style={styles.body}>
-            {/* Header */}
-            <header style={styles.header}>
-                <div style={styles.headerLeft}>
-                    <h1 style={styles.title}>Tube & Pipe Plant Equipment Tracker</h1>
-                    <p style={styles.subtitle}>{projects.length} projects • {tasks.length} tasks • {needsAttention.length} need attention</p>
+        <div style={{fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif',background:'#f9fafb',minHeight:'100vh'}}>
+            {/* HEADER */}
+            <div style={{background:'#fff',padding:'20px 32px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid #e5e7eb'}}>
+                <div>
+                    <h1 style={{fontSize:'22px',fontWeight:'700',color:'#111827',margin:0}}>Tube & Pipe Plant Equipment Tracker</h1>
+                    <p style={{fontSize:'14px',color:'#6b7280',margin:'4px 0 0'}}>{projects.length} projects • {tasks.length} tasks • {needsAttention.length} need attention</p>
                 </div>
-                <div style={styles.headerRight}>
-                    <button style={styles.importBtn}>📤 Import</button>
-                    <button onClick={() => { setEditingProject(null); setShowProjectModal(true); }} style={styles.newProjectBtn}>+ New Project</button>
+                <div style={{display:'flex',gap:'12px'}}>
+                    <button style={{padding:'10px 18px',border:'1px solid #d1d5db',borderRadius:'8px',background:'#fff',cursor:'pointer',display:'flex',alignItems:'center',gap:'6px',fontWeight:'500',color:'#374151'}}>
+                        <span style={{fontSize:'16px'}}>↑</span> Import
+                    </button>
+                    <button onClick={()=>{setEditingProject(null);setShowProjectModal(true)}} style={{padding:'10px 18px',border:'none',borderRadius:'8px',background:'#2563eb',color:'#fff',cursor:'pointer',fontWeight:'500'}}>
+                        + New Project
+                    </button>
                 </div>
-            </header>
+            </div>
 
-            {/* Tabs */}
-            <div style={styles.tabsContainer}>
-                <div style={styles.tabs}>
-                    {tabs.map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={activeTab === tab.id ? {...styles.tab, ...styles.tabActive} : styles.tab}>
-                            {tab.icon} {tab.label} {tab.count !== undefined && <span style={styles.tabCount}>({tab.count})</span>}
+            {/* TABS */}
+            <div style={{background:'#fff',padding:'0 32px',borderBottom:'1px solid #e5e7eb'}}>
+                <div style={{display:'flex',gap:'4px'}}>
+                    {[
+                        {id:'dashboard',icon:'📊',label:'Dashboard'},
+                        {id:'projects',icon:'📁',label:'Projects'},
+                        {id:'priority',icon:'⚡',label:'Priority Tasks',count:overdueTasks.length},
+                        {id:'tasks',icon:'✓',label:'Tasks',count:tasks.length - completedTasks},
+                        {id:'urgent',icon:'⚠',label:'Urgent',count:needsAttention.length},
+                    ].map(t=>(
+                        <button key={t.id} onClick={()=>setActiveTab(t.id)} style={{
+                            padding:'16px 18px',border:'none',background:'transparent',cursor:'pointer',fontSize:'14px',
+                            color:activeTab===t.id?'#2563eb':'#6b7280',borderBottom:activeTab===t.id?'2px solid #2563eb':'2px solid transparent',
+                            fontWeight:activeTab===t.id?'600':'400',display:'flex',alignItems:'center',gap:'6px'
+                        }}>
+                            {t.icon} {t.label} {t.count!==undefined&&<span style={{color:'#9ca3af'}}>({t.count})</span>}
                         </button>
                     ))}
                 </div>
             </div>
 
-            <div style={styles.container}>
-                {loading ? <div style={styles.loading}>Loading...</div> : (
+            <div style={{padding:'28px 32px',maxWidth:'1400px',margin:'0 auto'}}>
+                {loading ? <div style={{textAlign:'center',padding:'60px',color:'#6b7280'}}>Loading...</div> : (
                     <>
-                        {/* Dashboard Tab */}
-                        {activeTab === 'dashboard' && (
+                        {activeTab==='dashboard'&&(
                             <>
-                                {/* Stats Cards */}
-                                <div style={styles.statsGrid}>
-                                    <div style={styles.statCard}>
-                                        <div>
-                                            <div style={styles.statLabel}>Super Priority</div>
-                                            <div style={styles.statNumber}>{superPriority.length}</div>
-                                            <div style={styles.statSub}>${formatMoney(totalPipeline * 0.3)}</div>
-                                        </div>
-                                        <div style={{...styles.statIcon, background: '#fee2e2', color: '#ef4444'}}>🚨</div>
-                                    </div>
-                                    <div style={styles.statCard}>
-                                        <div>
-                                            <div style={styles.statLabel}>Total Pipeline</div>
-                                            <div style={styles.statNumber}>${formatMoney(totalPipeline)}</div>
-                                            <div style={styles.statSub}>{projects.length} projects</div>
-                                        </div>
-                                        <div style={{...styles.statIcon, background: '#dbeafe', color: '#3b82f6'}}>📈</div>
-                                    </div>
-                                    <div style={styles.statCard}>
-                                        <div>
-                                            <div style={styles.statLabel}>Tasks Due</div>
-                                            <div style={styles.statNumber}>{todayTasks.length}</div>
-                                            <div style={styles.statSub}>{tasks.filter(t=>t.status==='completed').length}/{tasks.length} done</div>
-                                        </div>
-                                        <div style={{...styles.statIcon, background: '#dcfce7', color: '#22c55e'}}>✅</div>
-                                    </div>
-                                    <div style={styles.statCard}>
-                                        <div>
-                                            <div style={styles.statLabel}>Avg. Margin</div>
-                                            <div style={styles.statNumber}>11.9%</div>
-                                            <div style={styles.statSub}>Negotiation markup</div>
-                                        </div>
-                                        <div style={{...styles.statIcon, background: '#f3e8ff', color: '#a855f7'}}>📊</div>
-                                    </div>
+                                {/* STATS */}
+                                <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'20px',marginBottom:'28px'}}>
+                                    <StatCard label="Super Priority" value={superPriority.length} sub={'$'+formatM(totalPipeline*0.3)} iconBg="#fee2e2" icon="⚠️"/>
+                                    <StatCard label="Total Pipeline" value={'$'+formatM(totalPipeline)} sub={projects.length+' projects'} iconBg="#dbeafe" icon="📈"/>
+                                    <StatCard label="Tasks Due" value={tasks.length-completedTasks} sub={completedTasks+'/'+tasks.length+' done'} iconBg="#dcfce7" icon="✅"/>
+                                    <StatCard label="Avg. Margin" value="11.9%" sub="Negotiation markup" iconBg="#f3e8ff" icon="📊"/>
                                 </div>
 
-                                {/* Projects Needing Attention */}
-                                <div style={styles.section}>
-                                    <div style={styles.sectionHeader}>
-                                        <h2 style={{...styles.sectionTitle, color: '#ef4444'}}>🔔 Projects Needing Attention ({needsAttention.length})</h2>
-                                    </div>
-                                    <div style={styles.attentionGrid}>
-                                        {needsAttention.length === 0 ? (
-                                            <div style={styles.emptyAttention}>✅ All projects are up to date!</div>
-                                        ) : needsAttention.slice(0, 3).map(p => (
-                                            <div key={p.id} style={styles.attentionCard}>
-                                                <div style={styles.attentionTitle}>{p.customer}</div>
-                                                <div style={styles.attentionSub}>{p.project_name || 'No details'}</div>
-                                                <div style={styles.attentionNote}>💬 {p.notes || 'Follow up required'}</div>
+                                {/* PROJECTS NEEDING ATTENTION */}
+                                <div style={{background:'#fff',borderRadius:'12px',padding:'20px 24px',marginBottom:'24px',border:'1px solid #fee2e2'}}>
+                                    <h2 style={{fontSize:'15px',fontWeight:'600',color:'#dc2626',margin:'0 0 16px',display:'flex',alignItems:'center',gap:'8px'}}>
+                                        <span>🔔</span> Projects Needing Attention ({needsAttention.length})
+                                    </h2>
+                                    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'16px'}}>
+                                        {needsAttention.length===0?(
+                                            <div style={{gridColumn:'1/-1',padding:'24px',textAlign:'center',color:'#22c55e',background:'#f0fdf4',borderRadius:'8px'}}>
+                                                ✅ All projects are up to date!
+                                            </div>
+                                        ):needsAttention.slice(0,3).map(p=>(
+                                            <div key={p.id} style={{border:'1px solid #e5e7eb',borderRadius:'10px',padding:'16px',background:'#fff'}}>
+                                                <div style={{fontWeight:'600',color:'#111827',marginBottom:'2px'}}>{p.customer}</div>
+                                                <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'12px'}}>{p.project_name||'No details'}</div>
+                                                <div style={{fontSize:'13px',color:'#ea580c',background:'#fff7ed',padding:'10px 12px',borderRadius:'6px',display:'flex',alignItems:'center',gap:'6px'}}>
+                                                    <span>💬</span> {p.notes||'Follow up required'}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
 
-                                {/* Task Lists */}
-                                <div style={styles.section}>
-                                    <div style={styles.sectionHeader}>
-                                        <h2 style={styles.sectionTitle}>✅ Task Lists</h2>
-                                        <button onClick={() => { setEditingTaskList(null); setShowTaskListModal(true); }} style={styles.newListBtn}>+ New List</button>
+                                {/* TASK LISTS */}
+                                <div style={{background:'#fff',borderRadius:'12px',padding:'20px 24px',border:'1px solid #e5e7eb'}}>
+                                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
+                                        <h2 style={{fontSize:'15px',fontWeight:'600',color:'#111827',margin:0,display:'flex',alignItems:'center',gap:'8px'}}>
+                                            <span>✓</span> Task Lists
+                                        </h2>
+                                        <button onClick={()=>setShowListModal(true)} style={{padding:'8px 14px',border:'none',background:'transparent',color:'#2563eb',cursor:'pointer',fontWeight:'500',fontSize:'14px'}}>
+                                            + New List
+                                        </button>
                                     </div>
-                                    <div style={styles.taskListsGrid}>
-                                        {taskLists.map(list => {
-                                            const listTasks = tasks.filter(t => t.list_id === list.id || (!t.list_id && list.id === 1));
-                                            const completed = listTasks.filter(t => t.status === 'completed').length;
-                                            const percent = listTasks.length > 0 ? Math.round((completed / listTasks.length) * 100) : 0;
+                                    <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'20px'}}>
+                                        {taskLists.map(list=>{
+                                            const listTasks = tasks.filter(t=>t.list_id===list.id);
+                                            const done = listTasks.filter(t=>t.status==='completed').length;
+                                            const pct = listTasks.length ? Math.round(done/listTasks.length*100) : 0;
                                             return (
-                                                <div key={list.id} style={styles.taskListCard}>
-                                                    <div style={{...styles.taskListHeader, background: list.color}}>
-                                                        <span>{list.icon} {list.name}</span>
+                                                <div key={list.id} style={{borderRadius:'12px',overflow:'hidden',border:'1px solid #e5e7eb'}}>
+                                                    <div style={{background:list.color,padding:'14px 16px',color:'#fff',fontWeight:'600',fontSize:'15px',display:'flex',alignItems:'center',gap:'8px'}}>
+                                                        {list.icon} {list.name}
                                                     </div>
-                                                    <div style={styles.taskListDesc}>{list.description}</div>
-                                                    <div style={styles.taskListProgress}>
-                                                        <span>{completed} of {listTasks.length} tasks</span>
-                                                        <span>{percent}% complete</span>
-                                                    </div>
-                                                    <div style={styles.progressBar}>
-                                                        <div style={{...styles.progressFill, width: `${percent}%`, background: list.color}}></div>
-                                                    </div>
-                                                    <div style={styles.taskListItems}>
-                                                        {listTasks.slice(0, 3).map(t => (
-                                                            <div key={t.id} style={styles.taskListItem}>
-                                                                <span style={{...styles.taskDot, background: t.due_date && new Date(t.due_date) < new Date() ? '#ef4444' : '#f59e0b'}}></span>
-                                                                <span style={styles.taskItemTitle}>{t.title}</span>
-                                                                <span style={styles.taskItemDate}>{t.due_date ? formatShortDate(t.due_date) : ''}</span>
+                                                    <div style={{padding:'14px 16px'}}>
+                                                        <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'14px'}}>{list.description}</div>
+                                                        <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#9ca3af',marginBottom:'8px'}}>
+                                                            <span>{done} of {listTasks.length} tasks</span>
+                                                            <span>{pct}% complete</span>
+                                                        </div>
+                                                        <div style={{height:'5px',background:'#e5e7eb',borderRadius:'3px',overflow:'hidden',marginBottom:'14px'}}>
+                                                            <div style={{height:'100%',width:pct+'%',background:list.color,borderRadius:'3px'}}></div>
+                                                        </div>
+                                                        {listTasks.slice(0,3).map(t=>(
+                                                            <div key={t.id} style={{display:'flex',alignItems:'center',gap:'10px',padding:'8px 0',fontSize:'13px',borderTop:'1px solid #f3f4f6'}}>
+                                                                <span style={{width:'8px',height:'8px',borderRadius:'50%',background:t.due_date&&new Date(t.due_date)<new Date()?'#ef4444':'#f59e0b'}}></span>
+                                                                <span style={{flex:1,color:'#374151'}}>{t.title}</span>
+                                                                <span style={{color:'#9ca3af',fontSize:'12px'}}>{t.due_date?fmtDate(t.due_date):''}</span>
                                                             </div>
                                                         ))}
+                                                        <button onClick={()=>{setSelectedListId(list.id);setEditingTask(null);setShowTaskModal(true)}} style={{marginTop:'10px',width:'100%',padding:'10px',border:'1px dashed #d1d5db',borderRadius:'6px',background:'transparent',color:'#6b7280',cursor:'pointer',fontSize:'13px'}}>
+                                                            + Add Task
+                                                        </button>
                                                     </div>
                                                 </div>
                                             );
@@ -180,83 +160,74 @@ export default function Dashboard() {
                             </>
                         )}
 
-                        {/* Projects Tab */}
-                        {activeTab === 'projects' && (
-                            <div style={styles.section}>
-                                <div style={styles.sectionHeader}>
-                                    <h2 style={styles.sectionTitle}>📁 All Projects</h2>
-                                    <button onClick={() => { setEditingProject(null); setShowProjectModal(true); }} style={styles.addBtn}>+ Add Project</button>
+                        {activeTab==='projects'&&(
+                            <div style={{background:'#fff',borderRadius:'12px',padding:'24px',border:'1px solid #e5e7eb'}}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
+                                    <h2 style={{fontSize:'16px',fontWeight:'600',color:'#111827',margin:0}}>📁 All Projects</h2>
+                                    <button onClick={()=>{setEditingProject(null);setShowProjectModal(true)}} style={{padding:'8px 16px',border:'none',borderRadius:'6px',background:'#2563eb',color:'#fff',cursor:'pointer',fontWeight:'500',fontSize:'13px'}}>+ Add Project</button>
                                 </div>
-                                <div style={styles.projectsTable}>
-                                    <div style={styles.tableHeader}>
-                                        <div style={{flex:2}}>Customer</div>
-                                        <div style={{flex:2}}>Project</div>
-                                        <div style={{flex:2}}>Notes</div>
-                                        <div style={{flex:1}}>Status</div>
-                                        <div style={{flex:1}}>Actions</div>
-                                    </div>
-                                    {projects.map(p => (
-                                        <div key={p.id} style={styles.tableRow}>
-                                            <div style={{flex:2, fontWeight:'600'}}>{p.customer}</div>
-                                            <div style={{flex:2}}>{p.project_name || '-'}</div>
-                                            <div style={{flex:2, color:'#64748b'}}>{p.notes || '-'}</div>
-                                            <div style={{flex:1}}><span style={styles.statusBadge}>{p.status || 'active'}</span></div>
-                                            <div style={{flex:1, display:'flex', gap:'8px'}}>
-                                                <button onClick={() => { setEditingProject(p); setShowProjectModal(true); }} style={styles.iconBtn}>✏️</button>
-                                                <button onClick={() => deleteProject(p.id)} style={styles.iconBtn}>🗑️</button>
-                                            </div>
+                                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                                    <thead>
+                                        <tr style={{background:'#f9fafb',textAlign:'left'}}>
+                                            <th style={{padding:'12px 16px',fontSize:'13px',color:'#6b7280',fontWeight:'500'}}>Customer</th>
+                                            <th style={{padding:'12px 16px',fontSize:'13px',color:'#6b7280',fontWeight:'500'}}>Project</th>
+                                            <th style={{padding:'12px 16px',fontSize:'13px',color:'#6b7280',fontWeight:'500'}}>Notes</th>
+                                            <th style={{padding:'12px 16px',fontSize:'13px',color:'#6b7280',fontWeight:'500'}}>Amount</th>
+                                            <th style={{padding:'12px 16px',fontSize:'13px',color:'#6b7280',fontWeight:'500',width:'100px'}}>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {projects.map(p=>(
+                                            <tr key={p.id} style={{borderTop:'1px solid #e5e7eb'}}>
+                                                <td style={{padding:'14px 16px',fontWeight:'500',color:'#111827'}}>{p.customer}</td>
+                                                <td style={{padding:'14px 16px',color:'#374151'}}>{p.project_name||'-'}</td>
+                                                <td style={{padding:'14px 16px',color:'#6b7280',fontSize:'13px'}}>{p.notes||'-'}</td>
+                                                <td style={{padding:'14px 16px',color:'#111827'}}>${formatM(p.quote_amount||0)}</td>
+                                                <td style={{padding:'14px 16px'}}>
+                                                    <button onClick={()=>{setEditingProject(p);setShowProjectModal(true)}} style={{background:'none',border:'none',cursor:'pointer',marginRight:'8px'}}>✏️</button>
+                                                    <button onClick={()=>deleteProject(p.id)} style={{background:'none',border:'none',cursor:'pointer'}}>🗑️</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {(activeTab==='tasks'||activeTab==='priority')&&(
+                            <div style={{background:'#fff',borderRadius:'12px',padding:'24px',border:'1px solid #e5e7eb'}}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px'}}>
+                                    <h2 style={{fontSize:'16px',fontWeight:'600',color:'#111827',margin:0}}>{activeTab==='priority'?'⚡ Priority Tasks':'✅ All Tasks'}</h2>
+                                    <button onClick={()=>{setEditingTask(null);setSelectedListId(null);setShowTaskModal(true)}} style={{padding:'8px 16px',border:'none',borderRadius:'6px',background:'#2563eb',color:'#fff',cursor:'pointer',fontWeight:'500',fontSize:'13px'}}>+ Add Task</button>
+                                </div>
+                                {(activeTab==='priority'?overdueTasks:tasks.filter(t=>t.status!=='completed')).map(t=>(
+                                    <div key={t.id} style={{display:'flex',alignItems:'center',gap:'14px',padding:'14px 16px',background:'#f9fafb',borderRadius:'8px',marginBottom:'10px',borderLeft:t.due_date&&new Date(t.due_date)<new Date()?'4px solid #ef4444':'4px solid #e5e7eb'}}>
+                                        <button onClick={()=>completeTask(t.id)} style={{width:'22px',height:'22px',borderRadius:'50%',border:'2px solid #d1d5db',background:'#fff',cursor:'pointer'}}>○</button>
+                                        <div style={{flex:1}}>
+                                            <div style={{fontWeight:'500',color:'#111827'}}>{t.title}</div>
+                                            <div style={{fontSize:'13px',color:'#6b7280',marginTop:'2px'}}>📅 {t.due_date?fmtDate(t.due_date):'No date'}</div>
                                         </div>
-                                    ))}
-                                </div>
+                                        <button onClick={()=>{setEditingTask(t);setShowTaskModal(true)}} style={{background:'none',border:'none',cursor:'pointer'}}>✏️</button>
+                                        <button onClick={()=>deleteTask(t.id)} style={{background:'none',border:'none',cursor:'pointer'}}>🗑️</button>
+                                    </div>
+                                ))}
                             </div>
                         )}
 
-                        {/* Tasks Tab */}
-                        {(activeTab === 'tasks' || activeTab === 'priority') && (
-                            <div style={styles.section}>
-                                <div style={styles.sectionHeader}>
-                                    <h2 style={styles.sectionTitle}>{activeTab === 'priority' ? '⚡ Priority Tasks' : '✅ All Tasks'}</h2>
-                                    <button onClick={() => { setEditingTask(null); setShowTaskModal(true); }} style={styles.addBtn}>+ Add Task</button>
-                                </div>
-                                <div style={styles.tasksList}>
-                                    {(activeTab === 'priority' ? overdueTasks : tasks).map(t => {
-                                        const isOverdue = t.due_date && new Date(t.due_date) < new Date();
-                                        return (
-                                            <div key={t.id} style={{...styles.taskRow, borderLeft: isOverdue ? '4px solid #ef4444' : '4px solid #e5e7eb'}}>
-                                                <button onClick={() => completeTask(t.id)} style={styles.checkbox}>○</button>
-                                                <div style={{flex:1}}>
-                                                    <div style={styles.taskTitle}>{t.title}</div>
-                                                    <div style={styles.taskMeta}>📅 {t.due_date ? formatShortDate(t.due_date) : 'No date'} {isOverdue && <span style={styles.overdueTag}>Overdue</span>}</div>
-                                                </div>
-                                                <div style={{display:'flex', gap:'8px'}}>
-                                                    <button onClick={() => { setEditingTask(t); setShowTaskModal(true); }} style={styles.iconBtn}>✏️</button>
-                                                    <button onClick={() => deleteTask(t.id)} style={styles.iconBtn}>🗑️</button>
-                                                </div>
+                        {activeTab==='urgent'&&(
+                            <div style={{background:'#fff',borderRadius:'12px',padding:'24px',border:'1px solid #fee2e2'}}>
+                                <h2 style={{fontSize:'16px',fontWeight:'600',color:'#dc2626',margin:'0 0 20px'}}>🚨 Urgent - Needs Attention</h2>
+                                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'16px'}}>
+                                    {needsAttention.length===0?(
+                                        <div style={{padding:'40px',textAlign:'center',color:'#22c55e',background:'#f0fdf4',borderRadius:'8px'}}>✅ All caught up!</div>
+                                    ):needsAttention.map(p=>(
+                                        <div key={p.id} style={{border:'1px solid #fee2e2',borderRadius:'10px',padding:'20px',background:'#fffbfb'}}>
+                                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
+                                                <div style={{fontWeight:'600',color:'#111827'}}>{p.customer}</div>
+                                                <button onClick={()=>{setEditingProject(p);setShowProjectModal(true)}} style={{background:'none',border:'none',cursor:'pointer'}}>✏️</button>
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Urgent Tab */}
-                        {activeTab === 'urgent' && (
-                            <div style={styles.section}>
-                                <div style={styles.sectionHeader}>
-                                    <h2 style={{...styles.sectionTitle, color: '#ef4444'}}>🚨 Urgent - Needs Attention</h2>
-                                </div>
-                                <div style={styles.urgentGrid}>
-                                    {needsAttention.length === 0 ? (
-                                        <div style={styles.emptyState}>✅ All caught up! No urgent items.</div>
-                                    ) : needsAttention.map(p => (
-                                        <div key={p.id} style={styles.urgentCard}>
-                                            <div style={styles.urgentHeader}>
-                                                <div style={styles.urgentTitle}>{p.customer}</div>
-                                                <button onClick={() => { setEditingProject(p); setShowProjectModal(true); }} style={styles.iconBtn}>✏️</button>
-                                            </div>
-                                            <div style={styles.urgentProject}>{p.project_name || 'No details'}</div>
-                                            <div style={styles.urgentNote}>💬 {p.notes || 'Requires follow-up'}</div>
-                                            <div style={styles.urgentDate}>Last update: {formatShortDate(p.last_follow_up || p.created_at)}</div>
+                                            <div style={{fontSize:'14px',color:'#6b7280',marginBottom:'12px'}}>{p.project_name||'No details'}</div>
+                                            <div style={{fontSize:'13px',color:'#dc2626',background:'#fee2e2',padding:'10px 12px',borderRadius:'6px'}}>💬 {p.notes||'Requires follow-up'}</div>
                                         </div>
                                     ))}
                                 </div>
@@ -266,172 +237,126 @@ export default function Dashboard() {
                 )}
             </div>
 
-            {/* Modals */}
-            {showProjectModal && <ProjectModal project={editingProject} onClose={() => setShowProjectModal(false)} onSave={saveProject} />}
-            {showTaskModal && <TaskModal task={editingTask} onClose={() => setShowTaskModal(false)} onSave={saveTask} />}
+            {showProjectModal&&<Modal title={editingProject?'Edit Project':'New Project'} onClose={()=>setShowProjectModal(false)}>
+                <ProjectForm project={editingProject} onSave={saveProject} onCancel={()=>setShowProjectModal(false)}/>
+            </Modal>}
+
+            {showTaskModal&&<Modal title={editingTask?'Edit Task':'New Task'} onClose={()=>setShowTaskModal(false)}>
+                <TaskForm task={editingTask} lists={taskLists} selectedListId={selectedListId} onSave={saveTask} onCancel={()=>setShowTaskModal(false)}/>
+            </Modal>}
+
+            {showListModal&&<Modal title="New Task List" onClose={()=>setShowListModal(false)}>
+                <ListForm onSave={addList} onCancel={()=>setShowListModal(false)}/>
+            </Modal>}
         </div>
     );
 
-    async function saveProject(data) {
-        if (editingProject) {
-            await fetch('/api/projects', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({...data, id: editingProject.id}) });
-        } else {
-            await fetch('/api/projects', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
-        }
-        setShowProjectModal(false);
-        loadData();
+    async function saveProject(d){
+        if(editingProject)await fetch('/api/projects',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...d,id:editingProject.id})});
+        else await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+        setShowProjectModal(false);loadData();
     }
-
-    async function deleteProject(id) {
-        if (confirm('Delete this project?')) {
-            await fetch(`/api/projects?id=${id}`, { method: 'DELETE' });
-            loadData();
-        }
+    async function deleteProject(id){if(confirm('Delete?')){await fetch(`/api/projects?id=${id}`,{method:'DELETE'});loadData();}}
+    async function saveTask(d){
+        if(editingTask)await fetch('/api/tasks',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...d,id:editingTask.id})});
+        else await fetch('/api/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+        setShowTaskModal(false);loadData();
     }
-
-    async function saveTask(data) {
-        if (editingTask) {
-            await fetch('/api/tasks', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({...data, id: editingTask.id}) });
-        } else {
-            await fetch('/api/tasks', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
-        }
-        setShowTaskModal(false);
-        loadData();
-    }
-
-    async function completeTask(id) {
-        await fetch('/api/tasks', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id, status: 'completed' }) });
-        loadData();
-    }
-
-    async function deleteTask(id) {
-        if (confirm('Delete this task?')) {
-            await fetch(`/api/tasks?id=${id}`, { method: 'DELETE' });
-            loadData();
-        }
-    }
+    async function completeTask(id){await fetch('/api/tasks',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,status:'completed'})});loadData();}
+    async function deleteTask(id){if(confirm('Delete?')){await fetch(`/api/tasks?id=${id}`,{method:'DELETE'});loadData();}}
+    function addList(d){setTaskLists([...taskLists,{id:Date.now(),...d}]);setShowListModal(false);}
 }
 
-function ProjectModal({ project, onClose, onSave }) {
-    const [customer, setCustomer] = useState(project?.customer || '');
-    const [projectName, setProjectName] = useState(project?.project_name || '');
-    const [notes, setNotes] = useState(project?.notes || '');
-    const [quoteAmount, setQuoteAmount] = useState(project?.quote_amount || '');
-    return (
-        <div style={styles.modalOverlay} onClick={onClose}>
-            <div style={styles.modal} onClick={e => e.stopPropagation()}>
-                <h3 style={styles.modalTitle}>{project ? '✏️ Edit Project' : '➕ New Project'}</h3>
-                <input placeholder="Customer name *" value={customer} onChange={e => setCustomer(e.target.value)} style={styles.input} />
-                <input placeholder="Project name / details *" value={projectName} onChange={e => setProjectName(e.target.value)} style={styles.input} />
-                <input placeholder="Quote amount (optional)" value={quoteAmount} onChange={e => setQuoteAmount(e.target.value)} style={styles.input} />
-                <textarea placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} style={{...styles.input, height:'80px', resize:'vertical'}} />
-                <div style={styles.modalActions}>
-                    <button onClick={onClose} style={styles.cancelBtn}>Cancel</button>
-                    <button onClick={() => customer && projectName && onSave({ customer, project_name: projectName, notes, quote_amount: parseFloat(quoteAmount) || 0 })} style={styles.saveBtn}>Save Project</button>
-                </div>
+function StatCard({label,value,sub,iconBg,icon}){
+    return(
+        <div style={{background:'#fff',borderRadius:'12px',padding:'20px',display:'flex',justifyContent:'space-between',alignItems:'center',border:'1px solid #e5e7eb'}}>
+            <div>
+                <div style={{fontSize:'13px',color:'#6b7280'}}>{label}</div>
+                <div style={{fontSize:'26px',fontWeight:'700',color:'#111827',margin:'4px 0'}}>{value}</div>
+                <div style={{fontSize:'13px',color:'#9ca3af'}}>{sub}</div>
+            </div>
+            <div style={{width:'48px',height:'48px',borderRadius:'12px',background:iconBg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px'}}>{icon}</div>
+        </div>
+    );
+}
+
+function Modal({title,children,onClose}){
+    return(
+        <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:'20px'}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:'16px',padding:'28px',width:'100%',maxWidth:'460px',boxShadow:'0 25px 50px rgba(0,0,0,0.25)'}}>
+                <h3 style={{margin:'0 0 20px',fontSize:'18px',color:'#111827'}}>{title}</h3>
+                {children}
             </div>
         </div>
     );
 }
 
-function TaskModal({ task, onClose, onSave }) {
-    const [title, setTitle] = useState(task?.title || '');
-    const [dueDate, setDueDate] = useState(task?.due_date || '');
-    return (
-        <div style={styles.modalOverlay} onClick={onClose}>
-            <div style={styles.modal} onClick={e => e.stopPropagation()}>
-                <h3 style={styles.modalTitle}>{task ? '✏️ Edit Task' : '➕ New Task'}</h3>
-                <input placeholder="Task description *" value={title} onChange={e => setTitle(e.target.value)} style={styles.input} />
-                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={styles.input} />
-                <div style={styles.modalActions}>
-                    <button onClick={onClose} style={styles.cancelBtn}>Cancel</button>
-                    <button onClick={() => title && onSave({ title, due_date: dueDate || null, status: task?.status || 'pending' })} style={styles.saveBtn}>Save Task</button>
-                </div>
+function ProjectForm({project,onSave,onCancel}){
+    const[c,setC]=useState(project?.customer||'');
+    const[p,setP]=useState(project?.project_name||'');
+    const[n,setN]=useState(project?.notes||'');
+    const[a,setA]=useState(project?.quote_amount||'');
+    return(
+        <>
+            <input placeholder="Customer name *" value={c} onChange={e=>setC(e.target.value)} style={inputStyle}/>
+            <input placeholder="Project name/details *" value={p} onChange={e=>setP(e.target.value)} style={inputStyle}/>
+            <input placeholder="Quote amount (optional)" value={a} onChange={e=>setA(e.target.value)} style={inputStyle}/>
+            <textarea placeholder="Notes (optional, type NA for none)" value={n} onChange={e=>setN(e.target.value)} style={{...inputStyle,height:'80px',resize:'vertical'}}/>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:'12px',marginTop:'8px'}}>
+                <button onClick={onCancel} style={cancelBtnStyle}>Cancel</button>
+                <button onClick={()=>c&&p&&onSave({customer:c,project_name:p,notes:n.toUpperCase()==='NA'?'':n,quote_amount:parseFloat(a)||0})} style={saveBtnStyle}>Save</button>
             </div>
-        </div>
+        </>
     );
 }
 
-function formatMoney(num) {
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(0) + 'K';
-    return num.toFixed(0);
+function TaskForm({task,lists,selectedListId,onSave,onCancel}){
+    const[t,setT]=useState(task?.title||'');
+    const[d,setD]=useState(task?.due_date||'');
+    const[l,setL]=useState(task?.list_id||selectedListId||'');
+    return(
+        <>
+            <input placeholder="Task *" value={t} onChange={e=>setT(e.target.value)} style={inputStyle}/>
+            <input type="date" value={d} onChange={e=>setD(e.target.value)} style={inputStyle}/>
+            <select value={l} onChange={e=>setL(e.target.value)} style={inputStyle}>
+                <option value="">No list</option>
+                {lists.map(li=><option key={li.id} value={li.id}>{li.name}</option>)}
+            </select>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:'12px',marginTop:'8px'}}>
+                <button onClick={onCancel} style={cancelBtnStyle}>Cancel</button>
+                <button onClick={()=>t&&onSave({title:t,due_date:d||null,list_id:l||null,status:task?.status||'pending'})} style={saveBtnStyle}>Save</button>
+            </div>
+        </>
+    );
 }
 
-function formatShortDate(d) {
-    if (!d) return '';
-    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function ListForm({onSave,onCancel}){
+    const[n,setN]=useState('');
+    const[d,setD]=useState('');
+    const[c,setC]=useState('#3b82f6');
+    return(
+        <>
+            <input placeholder="List name *" value={n} onChange={e=>setN(e.target.value)} style={inputStyle}/>
+            <input placeholder="Description" value={d} onChange={e=>setD(e.target.value)} style={inputStyle}/>
+            <div style={{marginBottom:'14px'}}>
+                <label style={{fontSize:'13px',color:'#6b7280',marginBottom:'6px',display:'block'}}>Color</label>
+                <div style={{display:'flex',gap:'8px'}}>
+                    {['#ef4444','#22c55e','#3b82f6','#6366f1','#f59e0b','#ec4899'].map(col=>(
+                        <div key={col} onClick={()=>setC(col)} style={{width:'32px',height:'32px',borderRadius:'8px',background:col,cursor:'pointer',border:c===col?'3px solid #111':'3px solid transparent'}}/>
+                    ))}
+                </div>
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:'12px',marginTop:'8px'}}>
+                <button onClick={onCancel} style={cancelBtnStyle}>Cancel</button>
+                <button onClick={()=>n&&onSave({name:n,description:d,color:c,icon:'📋'})} style={saveBtnStyle}>Create List</button>
+            </div>
+        </>
+    );
 }
 
-const styles = {
-    body: { fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif", background: '#f8fafc', minHeight: '100vh' },
-    header: { background: 'white', padding: '20px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap', gap: '15px' },
-    headerLeft: {},
-    headerRight: { display: 'flex', gap: '12px' },
-    title: { fontSize: '24px', fontWeight: '700', color: '#1e293b', margin: 0 },
-    subtitle: { fontSize: '14px', color: '#64748b', marginTop: '4px' },
-    importBtn: { padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '8px', background: 'white', cursor: 'pointer', fontWeight: '500' },
-    newProjectBtn: { padding: '10px 20px', border: 'none', borderRadius: '8px', background: '#3b82f6', color: 'white', cursor: 'pointer', fontWeight: '500' },
-    tabsContainer: { background: 'white', borderBottom: '1px solid #e2e8f0', padding: '0 30px' },
-    tabs: { display: 'flex', gap: '8px', overflowX: 'auto' },
-    tab: { padding: '16px 20px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: '#64748b', borderBottom: '2px solid transparent', whiteSpace: 'nowrap' },
-    tabActive: { color: '#3b82f6', borderBottom: '2px solid #3b82f6', fontWeight: '500' },
-    tabCount: { color: '#94a3b8' },
-    container: { padding: '30px', maxWidth: '1400px', margin: '0 auto' },
-    loading: { textAlign: 'center', padding: '60px', color: '#64748b' },
-    statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' },
-    statCard: { background: 'white', borderRadius: '12px', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
-    statLabel: { fontSize: '14px', color: '#64748b' },
-    statNumber: { fontSize: '28px', fontWeight: '700', color: '#1e293b', margin: '4px 0' },
-    statSub: { fontSize: '13px', color: '#94a3b8' },
-    statIcon: { width: '50px', height: '50px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' },
-    section: { background: 'white', borderRadius: '12px', padding: '24px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
-    sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
-    sectionTitle: { fontSize: '16px', fontWeight: '600', color: '#1e293b', margin: 0 },
-    addBtn: { padding: '8px 16px', border: 'none', borderRadius: '6px', background: '#3b82f6', color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
-    newListBtn: { padding: '8px 16px', border: '1px solid #e2e8f0', borderRadius: '6px', background: 'white', cursor: 'pointer', fontSize: '13px', color: '#3b82f6' },
-    attentionGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' },
-    attentionCard: { border: '1px solid #fee2e2', borderRadius: '10px', padding: '16px', background: '#fff' },
-    attentionTitle: { fontWeight: '600', color: '#1e293b', marginBottom: '4px' },
-    attentionSub: { fontSize: '13px', color: '#64748b', marginBottom: '10px' },
-    attentionNote: { fontSize: '13px', color: '#ef4444', background: '#fef2f2', padding: '8px 12px', borderRadius: '6px' },
-    emptyAttention: { padding: '30px', textAlign: 'center', color: '#22c55e', background: '#f0fdf4', borderRadius: '8px', gridColumn: '1/-1' },
-    taskListsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' },
-    taskListCard: { border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' },
-    taskListHeader: { padding: '14px 16px', color: 'white', fontWeight: '600', fontSize: '15px' },
-    taskListDesc: { padding: '12px 16px 0', fontSize: '13px', color: '#64748b' },
-    taskListProgress: { padding: '12px 16px 8px', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8' },
-    progressBar: { height: '4px', background: '#e2e8f0', margin: '0 16px' },
-    progressFill: { height: '100%', borderRadius: '2px', transition: 'width 0.3s' },
-    taskListItems: { padding: '12px 16px 16px' },
-    taskListItem: { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', fontSize: '13px' },
-    taskDot: { width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0 },
-    taskItemTitle: { flex: 1, color: '#374151' },
-    taskItemDate: { color: '#94a3b8', fontSize: '12px' },
-    projectsTable: { border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' },
-    tableHeader: { display: 'flex', padding: '12px 16px', background: '#f8fafc', fontWeight: '600', fontSize: '13px', color: '#64748b', borderBottom: '1px solid #e2e8f0' },
-    tableRow: { display: 'flex', padding: '14px 16px', alignItems: 'center', borderBottom: '1px solid #f1f5f9', fontSize: '14px' },
-    statusBadge: { padding: '4px 10px', borderRadius: '12px', fontSize: '12px', background: '#dbeafe', color: '#1d4ed8' },
-    tasksList: { display: 'flex', flexDirection: 'column', gap: '10px' },
-    taskRow: { display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px', background: '#f8fafc', borderRadius: '8px' },
-    checkbox: { width: '22px', height: '22px', borderRadius: '50%', border: '2px solid #cbd5e1', background: 'white', cursor: 'pointer', fontSize: '12px' },
-    taskTitle: { fontWeight: '500', color: '#1e293b' },
-    taskMeta: { fontSize: '13px', color: '#64748b', marginTop: '2px' },
-    overdueTag: { background: '#fee2e2', color: '#dc2626', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', marginLeft: '8px' },
-    urgentGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' },
-    urgentCard: { border: '1px solid #fee2e2', borderRadius: '10px', padding: '20px', background: 'linear-gradient(135deg, #fff 0%, #fef2f2 100%)' },
-    urgentHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' },
-    urgentTitle: { fontWeight: '600', color: '#1e293b', fontSize: '16px' },
-    urgentProject: { color: '#64748b', fontSize: '14px', marginBottom: '10px' },
-    urgentNote: { fontSize: '13px', color: '#b91c1c', background: '#fee2e2', padding: '10px 12px', borderRadius: '6px', marginBottom: '10px' },
-    urgentDate: { fontSize: '12px', color: '#94a3b8' },
-    emptyState: { padding: '40px', textAlign: 'center', color: '#64748b', background: '#f8fafc', borderRadius: '8px' },
-    iconBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '4px' },
-    modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' },
-    modal: { background: 'white', borderRadius: '16px', padding: '30px', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' },
-    modalTitle: { margin: '0 0 24px 0', color: '#1e293b', fontSize: '20px' },
-    input: { width: '100%', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '14px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' },
-    modalActions: { display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' },
-    cancelBtn: { padding: '12px 24px', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontWeight: '500' },
-    saveBtn: { padding: '12px 24px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: 'pointer', fontWeight: '500' }
-};
+function formatM(n){n=parseFloat(n)||0;return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+',000':n.toFixed(0);}
+function fmtDate(d){return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'});}
+
+const inputStyle={width:'100%',padding:'12px 14px',borderRadius:'8px',border:'1px solid #d1d5db',marginBottom:'14px',fontSize:'14px',outline:'none',boxSizing:'border-box'};
+const cancelBtnStyle={padding:'10px 20px',borderRadius:'8px',border:'1px solid #d1d5db',background:'#fff',cursor:'pointer',fontWeight:'500'};
+const saveBtnStyle={padding:'10px 20px',borderRadius:'8px',border:'none',background:'#2563eb',color:'#fff',cursor:'pointer',fontWeight:'500'};
