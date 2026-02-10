@@ -20,8 +20,7 @@ export async function POST(request) {
 
         const phone = from?.replace('whatsapp:', '') || '';
         const message = body?.trim().toUpperCase() || '';
-
-        console.log(`Received from ${phone}: ${body}`);
+        const originalMessage = body?.trim() || '';
 
         const supabase = getSupabase();
 
@@ -30,7 +29,7 @@ export async function POST(request) {
 
         switch (session?.session_state) {
             case 'adding_project':
-                response = await handleAddProject(supabase, session, body, phone);
+                response = await handleAddProject(supabase, session, originalMessage, phone);
                 break;
             default:
                 response = await handleCommand(supabase, message, phone);
@@ -49,15 +48,19 @@ async function handleCommand(supabase, message, phone) {
         await updateSession(supabase, phone, 'adding_project', { step: 'customer' });
         return '📝 *Add New Project*\n\nWhat is the *customer name*?';
     }
-    if (message === 'LIST') {
-        const { data } = await supabase.from('projects').select('*').eq('is_archived', false).limit(10);
+    if (message === 'LIST' || message === 'PROJECTS') {
+        const { data } = await supabase.from('projects').select('*').eq('is_archived', false).order('created_at', { ascending: false }).limit(10);
         if (!data || data.length === 0) return '📋 No projects yet. Type *ADD* to create one!';
         let msg = '📋 *Your Projects*\n\n';
-        data.forEach((p, i) => { msg += `${i+1}. ${p.customer} - $${p.quote_amount}\n`; });
+        data.forEach((p, i) => { 
+            msg += `${i+1}. *${p.customer}*\n   📁 ${p.project_name || 'N/A'}\n`;
+            if (p.notes) msg += `   📝 ${p.notes}\n`;
+            msg += '\n';
+        });
         return msg;
     }
-    if (message === 'HELP') {
-        return '📱 *Commands*\n\n• *ADD* - Add project\n• *LIST* - View projects';
+    if (message === 'HELP' || message === 'MENU') {
+        return '📱 *Pipe Tracker Commands*\n\n• *ADD* - Add new project\n• *LIST* - View projects\n• *HELP* - Show commands';
     }
     return '👋 Hi! Type *HELP* for commands or *ADD* to add a project.';
 }
@@ -67,22 +70,35 @@ async function handleAddProject(supabase, session, input, phone) {
     
     if (context.step === 'customer') {
         context.customer = input;
-        context.step = 'amount';
+        context.step = 'project_name';
         await updateSession(supabase, phone, 'adding_project', context);
-        return `✅ Customer: *${input}*\n\nWhat is the *quote amount*? (e.g., 50000)`;
+        return `✅ Customer: *${input}*\n\nWhat is the *project name/details*?`;
     }
     
-    if (context.step === 'amount') {
-        const amount = parseFloat(input.replace(/[,$]/g, '')) || 0;
+    if (context.step === 'project_name') {
+        context.project_name = input;
+        context.step = 'notes';
+        await updateSession(supabase, phone, 'adding_project', context);
+        return `✅ Project: *${input}*\n\nAny *notes*? (Type NA if none)`;
+    }
+    
+    if (context.step === 'notes') {
+        const notes = (input.toUpperCase() === 'NA' || input.toUpperCase() === 'N/A') ? null : input;
+        
         await supabase.from('projects').insert({
             customer: context.customer,
-            quote_amount: amount,
+            project_name: context.project_name,
+            notes: notes,
             priority: 'non-priority',
             status: 'quoted',
             last_follow_up: new Date().toISOString()
         });
+        
         await updateSession(supabase, phone, 'idle', {});
-        return `🎉 *Project Added!*\n\n📋 ${context.customer}\n💰 $${amount}`;
+        
+        let response = `🎉 *Project Added!*\n\n👤 ${context.customer}\n📁 ${context.project_name}`;
+        if (notes) response += `\n📝 ${notes}`;
+        return response;
     }
     
     await updateSession(supabase, phone, 'idle', {});
