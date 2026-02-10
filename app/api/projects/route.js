@@ -28,6 +28,7 @@ export async function POST(request) {
         const { data, error } = await supabase.from('projects').insert({
             customer: body.customer,
             project_name: body.project_name,
+            manufacturer: body.manufacturer || 'N/A',
             notes: body.notes || null,
             quote_amount: body.quote_amount || 0,
             status: 'active',
