@@ -27,11 +27,15 @@ export async function POST(request) {
         const body = await request.json();
         const { data, error } = await supabase.from('projects').insert({
             customer: body.customer,
-            project_name: body.project_name,
             manufacturer: body.manufacturer || 'N/A',
-            notes: body.notes || null,
+            project_name: body.project_name,
             quote_amount: body.quote_amount || 0,
-            status: 'active',
+            margin: body.margin || 0,
+            priority: body.priority || 'non-priority',
+            status: body.status || 'quoted',
+            next_steps: body.next_steps,
+            reminder_question: body.reminder_question,
+            notes: body.notes,
             is_archived: false,
             last_follow_up: new Date().toISOString()
         }).select().single();
@@ -47,13 +51,21 @@ export async function PUT(request) {
     try {
         const supabase = getSupabase();
         const body = await request.json();
-        const { data, error } = await supabase.from('projects').update({
-            customer: body.customer,
-            project_name: body.project_name,
-            notes: body.notes,
-            quote_amount: body.quote_amount,
-            last_follow_up: new Date().toISOString()
-        }).eq('id', body.id).select().single();
+        const updateData = { updated_at: new Date().toISOString() };
+        
+        if (body.customer !== undefined) updateData.customer = body.customer;
+        if (body.manufacturer !== undefined) updateData.manufacturer = body.manufacturer;
+        if (body.project_name !== undefined) updateData.project_name = body.project_name;
+        if (body.quote_amount !== undefined) updateData.quote_amount = body.quote_amount;
+        if (body.margin !== undefined) updateData.margin = body.margin;
+        if (body.priority !== undefined) updateData.priority = body.priority;
+        if (body.status !== undefined) updateData.status = body.status;
+        if (body.next_steps !== undefined) updateData.next_steps = body.next_steps;
+        if (body.reminder_question !== undefined) updateData.reminder_question = body.reminder_question;
+        if (body.notes !== undefined) updateData.notes = body.notes;
+        if (body.last_follow_up !== undefined) updateData.last_follow_up = body.last_follow_up;
+        
+        const { data, error } = await supabase.from('projects').update(updateData).eq('id', body.id).select().single();
         if (error) throw error;
         return NextResponse.json(data);
     } catch (e) {
