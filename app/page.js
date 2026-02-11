@@ -67,11 +67,12 @@ export default function Dashboard() {
     const upcomingTasks = tasks.filter(t => t.due_date && new Date(t.due_date) > new Date() && t.status !== 'completed');
 
     const statusGroups = {
-        'quoted': { name: 'Quoted', color: '#6b7280' },
-        'negotiation': { name: 'Negotiation', color: '#f59e0b' },
-        'lc_pending': { name: 'LC Pending', color: '#a855f7' },
-        'final_stage': { name: 'Final Stage', color: '#22c55e' }
-    };
+    'quoted': { name: 'Quoted', color: '#6b7280' },
+    'active': { name: 'Active', color: '#3b82f6' },
+    'negotiation': { name: 'Negotiation', color: '#f59e0b' },
+    'lc_pending': { name: 'LC Pending', color: '#a855f7' },
+    'final_stage': { name: 'Final Stage', color: '#22c55e' }
+};
 
     return (
         <div style={styles.body}>
